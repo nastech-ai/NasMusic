@@ -22,6 +22,10 @@ args = "Start application"
 task = "workflow.run"
 args = "GitHub Actions Runner"
 
+[[workflows.workflow.tasks]]
+task = "workflow.run"
+args = "Push to GitHub"
+
 [[workflows.workflow]]
 name = "Start application"
 author = "agent"
@@ -41,6 +45,17 @@ author = "agent"
 [[workflows.workflow.tasks]]
 task = "shell.exec"
 args = "bash actions-runner/run-runner.sh"
+
+[workflows.workflow.metadata]
+outputType = "console"
+
+[[workflows.workflow]]
+name = "Push to GitHub"
+author = "agent"
+
+[[workflows.workflow.tasks]]
+task = "shell.exec"
+args = "python3 push_to_github.py"
 
 [workflows.workflow.metadata]
 outputType = "console"
