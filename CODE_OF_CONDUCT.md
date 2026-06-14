@@ -1,4 +1,4 @@
-# SimpMusic Contributor Covenant Code of Conduct
+# NasMusic Contributor Covenant Code of Conduct
 
 ## Our Pledge
 

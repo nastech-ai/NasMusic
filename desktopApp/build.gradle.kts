@@ -8,7 +8,7 @@ import java.time.Instant
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter
 
-// desktopApp — JVM application module for SimpMusic Desktop.
+// desktopApp — JVM application module for NasMusic Desktop.
 //
 // Per JetBrains 2026 KMP guidance (AGP 9 + new default structure), the
 // platform-app entry points live in dedicated modules separate from the
@@ -122,7 +122,7 @@ dependencies {
     windowsAmd64(libs.compose.windows.x64)
 }
 
-// Append SimpMusic-specific keys to Conveyor's generated config file and
+// Append NasMusic-specific keys to Conveyor's generated config file and
 // — crucially — replace the auto-detected `app.inputs` classpath with
 // ProGuard's shrunk jar directory so the packaged AppImage carries
 // obfuscated + size-reduced bytecode instead of raw Gradle output.
@@ -133,9 +133,9 @@ tasks.named<hydraulic.conveyor.gradle.WriteConveyorConfigTask>("writeConveyorCon
     doLast {
         destination.get().asFile.appendText(
             """
-            |app.fsname = simpmusic
-            |app.display-name = SimpMusic
-            |app.rdns-name = com.maxrave.simpmusic
+            |app.fsname = nasmusic
+            |app.display-name = NasMusic
+            |app.rdns-name = com.nastechai.nasmusic
             |
             |// Override the Gradle-detected classpath with the ProGuard'd
             |// jar directory. Conveyor expands a directory entry to every
@@ -157,7 +157,7 @@ tasks.named<hydraulic.conveyor.gradle.WriteConveyorConfigTask>("writeConveyorCon
 
 compose.desktop {
     application {
-        mainClass = "com.maxrave.simpmusic.MainKt"
+        mainClass = "com.nastechai.nasmusic.MainKt"
         jvmArgs += "--add-opens=java.base/java.nio=ALL-UNNAMED"
 
         nativeDistributions {
@@ -177,7 +177,7 @@ compose.desktop {
             }
             targetFormats(*listTarget.toTypedArray())
             modules("jdk.unsupported")
-            packageName = "SimpMusic"
+            packageName = "NasMusic"
             macOS {
                 val formatedDate =
                     Instant.now().let {
@@ -205,10 +205,10 @@ compose.desktop {
                             <key>CFBundleTypeRole</key>
                             <string>Viewer</string>
                             <key>CFBundleURLName</key>
-                            <string>com.maxrave.simpmusic.deeplink</string>
+                            <string>com.nastechai.nasmusic.deeplink</string>
                             <key>CFBundleURLSchemes</key>
                             <array>
-                                <string>simpmusic</string>
+                                <string>nasmusic</string>
                             </array>
                         </dict>
                     </array>
@@ -316,7 +316,7 @@ tasks.register("packageConveyorAppImage") {
     )
 
     doLast {
-        val appName = "SimpMusic"
+        val appName = "NasMusic"
         val conveyorOutput = rootDir.resolve("output")
         if (!conveyorOutput.exists()) {
             throw GradleException(
@@ -361,25 +361,25 @@ tasks.register("packageConveyorAppImage") {
 
         // Ensure top-level PNG icon expected by appimagetool exists.
         val iconSrc = rootDir.resolve("composeApp/icon/circle_app_icon.png")
-        val iconDst = appDir.resolve("simpmusic.png")
+        val iconDst = appDir.resolve("nasmusic.png")
         if (!iconDst.exists() && iconSrc.exists()) {
             FileUtils.copyFile(iconSrc, iconDst)
         }
 
         val versionName = libs.versions.version.name.get()
-        val desktopFile = appDir.resolve("simpmusic.desktop")
+        val desktopFile = appDir.resolve("nasmusic.desktop")
         desktopFile.writeText(
             """[Desktop Entry]
             |Type=Application
             |Version=1.0
-            |Name=SimpMusic
-            |Comment=SimpMusic v$versionName - FOSS YouTube Music Client
-            |Exec=bin/simpmusic %u
-            |Icon=simpmusic
+            |Name=NasMusic
+            |Comment=NasMusic v$versionName - FOSS YouTube Music Client
+            |Exec=bin/nasmusic %u
+            |Icon=nasmusic
             |Terminal=false
             |Categories=Audio;AudioVideo;
-            |StartupWMClass=com-maxrave-simpmusic-MainKt
-            |MimeType=x-scheme-handler/simpmusic;
+            |StartupWMClass=com-nastechai-nasmusic-MainKt
+            |MimeType=x-scheme-handler/nasmusic;
             |
             """.trimMargin(),
         )
@@ -393,9 +393,9 @@ tasks.register("packageConveyorAppImage") {
             |
             |# Install icon into XDG dirs so GNOME/KDE pick it up the first time.
             |ICON_DIR="${'$'}HOME/.local/share/icons/hicolor/256x256/apps"
-            |if [ ! -f "${'$'}ICON_DIR/simpmusic.png" ] || [ "${'$'}HERE/simpmusic.png" -nt "${'$'}ICON_DIR/simpmusic.png" ]; then
+            |if [ ! -f "${'$'}ICON_DIR/nasmusic.png" ] || [ "${'$'}HERE/nasmusic.png" -nt "${'$'}ICON_DIR/nasmusic.png" ]; then
             |    mkdir -p "${'$'}ICON_DIR"
-            |    cp "${'$'}HERE/simpmusic.png" "${'$'}ICON_DIR/simpmusic.png"
+            |    cp "${'$'}HERE/nasmusic.png" "${'$'}ICON_DIR/nasmusic.png"
             |    gtk-update-icon-cache -f -t "${'$'}HOME/.local/share/icons/hicolor" 2>/dev/null || true
             |fi
             |
@@ -403,18 +403,18 @@ tasks.register("packageConveyorAppImage") {
             |DESKTOP_DIR="${'$'}HOME/.local/share/applications"
             |mkdir -p "${'$'}DESKTOP_DIR"
             |APPIMAGE_PATH="${'$'}{APPIMAGE:-${'$'}SELF}"
-            |sed "s|Exec=bin/simpmusic|Exec=${'$'}APPIMAGE_PATH|" "${'$'}HERE/simpmusic.desktop" > "${'$'}DESKTOP_DIR/com-maxrave-simpmusic-MainKt.desktop"
+            |sed "s|Exec=bin/nasmusic|Exec=${'$'}APPIMAGE_PATH|" "${'$'}HERE/nasmusic.desktop" > "${'$'}DESKTOP_DIR/com-nastechai-nasmusic-MainKt.desktop"
             |update-desktop-database "${'$'}DESKTOP_DIR" 2>/dev/null || true
             |
             |cd "${'$'}HERE"
-            |exec bin/simpmusic "${'$'}@"
+            |exec bin/nasmusic "${'$'}@"
             |
             """.trimMargin(),
         )
         appRun.setExecutable(true, false)
 
-        // Conveyor's launcher lives at output/bin/simpmusic (lowercase).
-        val appExecutable = appDir.resolve("bin/simpmusic")
+        // Conveyor's launcher lives at output/bin/nasmusic (lowercase).
+        val appExecutable = appDir.resolve("bin/nasmusic")
         if (appExecutable.exists() && !appExecutable.canExecute()) {
             appExecutable.setExecutable(true)
         }
@@ -442,7 +442,7 @@ tasks.register("packageConveyorAppImage") {
 // Single command for users: `./gradlew :desktopApp:buildLinuxAppImage --no-configuration-cache`
 tasks.register("buildLinuxAppImage") {
     group = "distribution"
-    description = "Full SimpMusic Desktop Linux AppImage build pipeline (vlcSetup → conveyor → AppImage)."
+    description = "Full NasMusic Desktop Linux AppImage build pipeline (vlcSetup → conveyor → AppImage)."
     dependsOn(conveyorMakeLinuxApp)
     finalizedBy("packageConveyorAppImage")
 }
@@ -482,13 +482,13 @@ val conveyorMakeMacZipAarch64 = tasks.register<Exec>("conveyorMakeMacZipAarch64"
 
 tasks.register("buildMacZipAmd64") {
     group = "distribution"
-    description = "Full SimpMusic Desktop macOS Intel .zip pipeline (vlcSetup → conveyor)."
+    description = "Full NasMusic Desktop macOS Intel .zip pipeline (vlcSetup → conveyor)."
     dependsOn(conveyorMakeMacZipAmd64)
 }
 
 tasks.register("buildMacZipAarch64") {
     group = "distribution"
-    description = "Full SimpMusic Desktop macOS Apple Silicon .zip pipeline (vlcSetup → conveyor)."
+    description = "Full NasMusic Desktop macOS Apple Silicon .zip pipeline (vlcSetup → conveyor)."
     dependsOn(conveyorMakeMacZipAarch64)
 }
 
@@ -512,7 +512,7 @@ val conveyorMakeWindowsMsix = tasks.register<Exec>("conveyorMakeWindowsMsix") {
 
 tasks.register("buildWindowsMsix") {
     group = "distribution"
-    description = "Full SimpMusic Desktop Windows .msix pipeline (vlcSetup → conveyor)."
+    description = "Full NasMusic Desktop Windows .msix pipeline (vlcSetup → conveyor)."
     dependsOn(conveyorMakeWindowsMsix)
 }
 

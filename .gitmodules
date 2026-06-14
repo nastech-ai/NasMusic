@@ -1,3 +1,10 @@
-[submodule "core"]
-    path = core
-    url = https://github.com/maxrave-dev/core
+# All dependencies are now embedded directly in this repo.
+# No git submodules — everything lives in core/ and libs/.
+# Original sources (all rebranded to NasTech/NasMusic):
+#   core/         ← github.com/nastech-ai/core (common, data, domain)
+#   libs/gemini-kotlin/        ← github.com/nastech-ai/gemini-kotlin
+#   libs/NowPlayingCenter/     ← github.com/nastech-ai/NowPlayingCenter
+#   libs/BravePipeExtractor/   ← github.com/nastech-ai/BravePipeExtractor
+#   libs/MediaServiceCore/     ← github.com/nastech-ai/MediaServiceCore
+#   libs/SharedModules/        ← github.com/nastech-ai/SharedModules
+#   libs/mediasession-kt/      ← github.com/nastech-ai/mediasession-kt

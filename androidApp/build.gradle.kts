@@ -16,11 +16,11 @@ plugins {
 android {
     val abis = arrayOf("armeabi-v7a", "arm64-v8a", "x86_64")
 
-    namespace = "com.maxrave.simpmusic"
+    namespace = "com.nastechai.nasmusic"
     compileSdk = 37
 
     defaultConfig {
-        applicationId = "com.maxrave.simpmusic"
+        applicationId = "com.nastechai.nasmusic"
         minSdk = 26
         targetSdk = 36
         versionCode =
@@ -174,7 +174,7 @@ dependencies {
 }
 
 sentry {
-    org.set("simpmusic")
+    org.set("nasmusic")
     projectName.set("android")
     ignoredFlavors.set(setOf("foss"))
     ignoredBuildTypes.set(setOf("debug"))
