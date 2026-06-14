@@ -75,9 +75,9 @@ HTML = """<!DOCTYPE html>
   <div class="card">
     <h2>🏷️ Brand Changes Applied</h2>
     <ul>
-      <li>App name <span><strike>SimpMusic</strike> → <strong>NasMusic</strong></span></li>
-      <li>Developer <span><strike>maxrave</strike> → <strong>nastechai</strong></span></li>
-      <li>Company <span><strike>Maxrave</strike> → <strong>NasTech</strong></span></li>
+      <li>App name <span><strong>NasMusic</strong></span></li>
+      <li>Developer <span><strong>nastechai</strong></span></li>
+      <li>Company <span><strong>NasTech</strong></span></li>
       <li>Android ID <span><code>com.nastechai.nasmusic</code></span></li>
       <li>URL scheme <span><code>nasmusic://</code></span></li>
       <li>Website <span><code>nastechai.com</code></span></li>

@@ -55,13 +55,13 @@ actual suspend fun calculateDataFraction(cacheRepository: CacheRepository): Sett
             val freeSpace =
                 mStorageStatsManager.getFreeBytes(StorageManager.UUID_DEFAULT).bytesToMB()
             val usedSpace = totalByte - freeSpace
-            val simpMusicSize = getSizeOfFile(application.filesDir).bytesToMB()
+            val nasMusicSize = getSizeOfFile(application.filesDir).bytesToMB()
             val thumbSize = (application.imageLoader.diskCache?.size ?: 0L).bytesToMB()
-            val otherApp = simpMusicSize.let { usedSpace.minus(it) - thumbSize }
+            val otherApp = nasMusicSize.let { usedSpace.minus(it) - thumbSize }
             val databaseSize =
-                simpMusicSize - playerCache.bytesToMB() - downloadCache.bytesToMB() - canvasCache.bytesToMB()
+                nasMusicSize - playerCache.bytesToMB() - downloadCache.bytesToMB() - canvasCache.bytesToMB()
             if (totalByte ==
-                freeSpace + otherApp + simpMusicSize + thumbSize
+                freeSpace + otherApp + nasMusicSize + thumbSize
             ) {
                 SettingsStorageSectionFraction(
                     otherApp = otherApp.toFloat().div(totalByte.toFloat()),

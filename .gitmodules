@@ -1,10 +1,24 @@
-# All dependencies are now embedded directly in this repo.
-# No git submodules — everything lives in core/ and libs/.
-# Original sources (all rebranded to NasTech/NasMusic):
-#   core/         ← github.com/nastech-ai/core (common, data, domain)
-#   libs/gemini-kotlin/        ← github.com/nastech-ai/gemini-kotlin
-#   libs/NowPlayingCenter/     ← github.com/nastech-ai/NowPlayingCenter
-#   libs/BravePipeExtractor/   ← github.com/nastech-ai/BravePipeExtractor
-#   libs/MediaServiceCore/     ← github.com/nastech-ai/MediaServiceCore
-#   libs/SharedModules/        ← github.com/nastech-ai/SharedModules
-#   libs/mediasession-kt/      ← github.com/nastech-ai/mediasession-kt
+# All dependencies are embedded directly — no git submodules.
+# Every folder below is a full copy (stripped .git) rebranded to NasTech/NasMusic.
+#
+# Original sources (all rebranded):
+#
+# ── Core ──────────────────────────────────────────────────────────────────
+#   core/common   core/data   core/domain
+#     ← github.com/nastech-ai/core
+#
+# ── Libs ──────────────────────────────────────────────────────────────────
+#   libs/gemini-kotlin/          ← nastech-ai/gemini-kotlin
+#   libs/NowPlayingCenter/       ← nastech-ai/NowPlayingCenter
+#   libs/BravePipeExtractor/     ← nastech-ai/BravePipeExtractor
+#   libs/MediaServiceCore/       ← nastech-ai/MediaServiceCore
+#   libs/SharedModules/          ← nastech-ai/SharedModules
+#   libs/mediasession-kt/        ← nastech-ai/mediasession-kt
+#   libs/ffmpeg-kit-16KB/        ← nastech-ai/ffmpeg-kit-16KB
+#   libs/lyricsplus/             ← nastech-ai/lyricsplus
+#   libs/Ktor2Curl/              ← nastech-ai/Ktor2Curl
+#   libs/kotlin-youtubeExtractor/ ← nastech-ai/kotlin-youtubeExtractor
+#   libs/android-youtubeExtractor/ ← nastech-ai/android-youtubeExtractor
+#   libs/PipePipeExtractor/      ← nastech-ai/PipePipeExtractor
+#   libs/rococoa/                ← nastech-ai/rococoa
+#   libs/AndroidLiquidGlass/     ← nastech-ai/AndroidLiquidGlass

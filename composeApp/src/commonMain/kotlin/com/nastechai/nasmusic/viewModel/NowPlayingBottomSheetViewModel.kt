@@ -12,7 +12,7 @@ import com.nastechai.domain.data.model.streams.YouTubeWatchEndpoint
 import com.nastechai.domain.manager.DataStoreManager
 import com.nastechai.domain.manager.DataStoreManager.Values.BETTER_LYRICS
 import com.nastechai.domain.manager.DataStoreManager.Values.LRCLIB
-import com.nastechai.domain.manager.DataStoreManager.Values.SIMPMUSIC
+import com.nastechai.domain.manager.DataStoreManager.Values.NASMUSIC
 import com.nastechai.domain.manager.DataStoreManager.Values.YOUTUBE
 import com.nastechai.domain.mediaservice.handler.DownloadHandler
 import com.nastechai.domain.mediaservice.handler.PlaylistType
@@ -64,7 +64,7 @@ class NowPlayingBottomSheetViewModel(
             NowPlayingBottomSheetUIState(
                 listLocalPlaylist = emptyList(),
                 listYouTubePlaylist = emptyList(),
-                mainLyricsProvider = SIMPMUSIC,
+                mainLyricsProvider = NASMUSIC,
                 sleepTimer =
                     SleepTimerState(
                         false,
@@ -107,8 +107,8 @@ class NowPlayingBottomSheetViewModel(
                 launch {
                     dataStoreManager.lyricsProvider.collectLatest { lyricsProvider ->
                         when (lyricsProvider) {
-                            SIMPMUSIC -> {
-                                _uiState.update { it.copy(mainLyricsProvider = SIMPMUSIC) }
+                            NASMUSIC -> {
+                                _uiState.update { it.copy(mainLyricsProvider = NASMUSIC) }
                             }
 
                             YOUTUBE -> {
@@ -336,7 +336,7 @@ class NowPlayingBottomSheetViewModel(
                 }
 
                 is NowPlayingBottomSheetUIEvent.ChangeLyricsProvider -> {
-                    if (listOf(SIMPMUSIC, YOUTUBE, LRCLIB, BETTER_LYRICS).contains(ev.lyricsProvider)) {
+                    if (listOf(NASMUSIC, YOUTUBE, LRCLIB, BETTER_LYRICS).contains(ev.lyricsProvider)) {
                         dataStoreManager.setLyricsProvider(ev.lyricsProvider)
                     } else {
                         return@launch

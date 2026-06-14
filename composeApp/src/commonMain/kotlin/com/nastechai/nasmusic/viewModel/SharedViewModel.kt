@@ -991,7 +991,7 @@ class SharedViewModel(
         duration: Int, // 0 if translated lyrics
         inputLyrics: Lyrics?,
         isTranslatedLyrics: Boolean,
-        lyricsProvider: LyricsProvider = LyricsProvider.SIMPMUSIC,
+        lyricsProvider: LyricsProvider = LyricsProvider.NASMUSIC,
     ) {
         if (inputLyrics == null) {
             _nowPlayingScreenData.update {
@@ -1083,12 +1083,12 @@ class SharedViewModel(
                             dataStoreManager.translationLanguage.first(),
                         )
                         log("Removed out-of-sync translated lyrics for $videoId")
-                        val simpMusicLyricsId = lyrics.simpMusicLyrics?.id
-                        if (lyricsProvider == LyricsProvider.SIMPMUSIC && !simpMusicLyricsId.isNullOrEmpty()) {
+                        val nasMusicLyricsId = lyrics.nasMusicLyrics?.id
+                        if (lyricsProvider == LyricsProvider.NASMUSIC && !nasMusicLyricsId.isNullOrEmpty()) {
                             viewModelScope.launch {
                                 lyricsCanvasRepository
                                     .voteNasMusicTranslatedLyrics(
-                                        translatedLyricsId = simpMusicLyricsId,
+                                        translatedLyricsId = nasMusicLyricsId,
                                         false,
                                     ).collectLatest {
                                         when (it) {
@@ -1119,16 +1119,16 @@ class SharedViewModel(
             runBlocking {
                 dataStoreManager.helpBuildLyricsDatabase.first() == TRUE
             } &&
-                lyricsProvider != LyricsProvider.SIMPMUSIC
+                lyricsProvider != LyricsProvider.NASMUSIC
         if (_nowPlayingState.value?.songEntity?.videoId == videoId) {
             val track = _nowPlayingState.value?.track
             when (isTranslatedLyrics) {
                 true -> {
-                    if (lyricsProvider == LyricsProvider.SIMPMUSIC) {
+                    if (lyricsProvider == LyricsProvider.NASMUSIC) {
                         _translatedVoteState.value =
                             VoteData(
-                                id = lyrics.simpMusicLyrics?.id ?: "",
-                                vote = lyrics.simpMusicLyrics?.vote ?: 0,
+                                id = lyrics.nasMusicLyrics?.id ?: "",
+                                vote = lyrics.nasMusicLyrics?.vote ?: 0,
                                 state = VoteState.Idle,
                             )
                     }
@@ -1164,11 +1164,11 @@ class SharedViewModel(
                 }
 
                 false -> {
-                    if (lyricsProvider == LyricsProvider.SIMPMUSIC) {
+                    if (lyricsProvider == LyricsProvider.NASMUSIC) {
                         _lyricsVoteState.value =
                             VoteData(
-                                id = lyrics.simpMusicLyrics?.id ?: "",
-                                vote = lyrics.simpMusicLyrics?.vote ?: 0,
+                                id = lyrics.nasMusicLyrics?.id ?: "",
+                                vote = lyrics.nasMusicLyrics?.vote ?: 0,
                                 state = VoteState.Idle,
                             )
                     }
@@ -1244,7 +1244,7 @@ class SharedViewModel(
             resetLyricsVoteState()
             val lyricsProvider = dataStoreManager.lyricsProvider.first()
             when (lyricsProvider) {
-                DataStoreManager.SIMPMUSIC -> {
+                DataStoreManager.NASMUSIC -> {
                     getNasMusicLyrics(
                         videoId,
                         song,
@@ -1297,7 +1297,7 @@ class SharedViewModel(
                     duration,
                     data,
                     false,
-                    LyricsProvider.SIMPMUSIC,
+                    LyricsProvider.NASMUSIC,
                 )
                 insertLyrics(
                     data.toLyricsEntity(videoId),
@@ -1481,11 +1481,11 @@ class SharedViewModel(
                     // convert to LINE_SYNCED, downvote, and fallback to AI translation
                     if (data.syncType == "RICH_SYNCED") {
                         Logger.w(tag, "NasMusic translated lyrics are RICH_SYNCED, downvoting and falling back to AI")
-                        val simpMusicLyricsId = data.simpMusicLyrics?.id
-                        if (!simpMusicLyricsId.isNullOrEmpty()) {
+                        val nasMusicLyricsId = data.nasMusicLyrics?.id
+                        if (!nasMusicLyricsId.isNullOrEmpty()) {
                             viewModelScope.launch {
                                 lyricsCanvasRepository
-                                    .voteNasMusicTranslatedLyrics(simpMusicLyricsId, false)
+                                    .voteNasMusicTranslatedLyrics(nasMusicLyricsId, false)
                                     .collectLatest { voteResult ->
                                         when (voteResult) {
                                             is Resource.Error -> Logger.w(tag, "Downvote RICH_SYNCED translated lyrics error: ${voteResult.message}")
@@ -1503,7 +1503,7 @@ class SharedViewModel(
                             0,
                             data,
                             true,
-                            LyricsProvider.SIMPMUSIC,
+                            LyricsProvider.NASMUSIC,
                         )
                     }
                 }
@@ -1793,9 +1793,9 @@ class SharedViewModel(
     fun voteLyrics(upvote: Boolean) {
         val lyricsData = _nowPlayingScreenData.value.lyricsData
         val lyricsProvider = lyricsData?.lyricsProvider
-        val simpMusicLyricsId = lyricsData?.lyrics?.simpMusicLyrics?.id ?: return
+        val nasMusicLyricsId = lyricsData?.lyrics?.nasMusicLyrics?.id ?: return
 
-        if (lyricsProvider != LyricsProvider.SIMPMUSIC || simpMusicLyricsId.isEmpty()) {
+        if (lyricsProvider != LyricsProvider.NASMUSIC || nasMusicLyricsId.isEmpty()) {
             Logger.w(tag, "Cannot vote: not a NasMusic lyrics or missing ID")
             return
         }
@@ -1808,7 +1808,7 @@ class SharedViewModel(
             }
             lyricsCanvasRepository
                 .voteNasMusicLyrics(
-                    lyricsId = simpMusicLyricsId,
+                    lyricsId = nasMusicLyricsId,
                     upvote = upvote,
                 ).collectLatest { result ->
                     when (result) {
@@ -1848,9 +1848,9 @@ class SharedViewModel(
     fun voteTranslatedLyrics(upvote: Boolean) {
         val translatedLyrics = _nowPlayingScreenData.value.lyricsData?.translatedLyrics
         val lyricsProvider = translatedLyrics?.second
-        val simpMusicLyricsId = translatedLyrics?.first?.simpMusicLyrics?.id ?: return
+        val nasMusicLyricsId = translatedLyrics?.first?.nasMusicLyrics?.id ?: return
 
-        if (lyricsProvider != LyricsProvider.SIMPMUSIC || simpMusicLyricsId.isEmpty()) {
+        if (lyricsProvider != LyricsProvider.NASMUSIC || nasMusicLyricsId.isEmpty()) {
             Logger.w(tag, "Cannot vote: not a NasMusic translated lyrics or missing ID")
             return
         }
@@ -1863,7 +1863,7 @@ class SharedViewModel(
             }
             lyricsCanvasRepository
                 .voteNasMusicTranslatedLyrics(
-                    translatedLyricsId = simpMusicLyricsId,
+                    translatedLyricsId = nasMusicLyricsId,
                     upvote = upvote,
                 ).collectLatest { result ->
                     when (result) {
@@ -1934,7 +1934,7 @@ sealed class UIEvent {
 }
 
 enum class LyricsProvider {
-    SIMPMUSIC,
+    NASMUSIC,
     YOUTUBE,
     SPOTIFY,
     LRCLIB,

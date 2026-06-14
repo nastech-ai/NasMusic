@@ -1,0 +1,56 @@
+plugins {
+    id 'checkstyle'
+    id 'com.squareup.wire' version '6.4.0'
+}
+
+checkstyle {
+    getConfigDirectory().set(rootProject.file("checkstyle"))
+    ignoreFailures false
+    showViolations true
+}
+
+wire {
+    java {
+    }
+}
+
+dependencies {
+    implementation project(':timeago-parser')
+
+    implementation "com.github.TeamNewPipe:nanojson:$nanojsonVersion"
+    implementation 'org.jsoup:jsoup:1.15.3'
+    implementation "org.java-websocket:Java-WebSocket:1.4.1"
+    implementation "com.github.spotbugs:spotbugs-annotations:$spotbugsVersion"
+    implementation 'org.nibor.autolink:autolink:0.10.0'
+    implementation "com.google.protobuf:protobuf-java:3.11.0"
+    implementation "com.squareup.okhttp3:okhttp:4.10.0"
+    implementation "org.brotli:dec:0.1.1"
+    implementation 'org.apache.commons:commons-lang3:3.8.1'
+    implementation 'commons-codec:commons-codec:1.16.0'
+    compileOnly "org.json:json:20231013"
+
+
+    // do not upgrade to 1.7.14, since in 1.7.14 Rhino uses the `SourceVersion` class, which is not
+    // available on Android (even when using desugaring), and `NoClassDefFoundError` is thrown
+    implementation 'org.mozilla:rhino:1.7.13'
+
+    checkstyle "com.puppycrawl.tools:checkstyle:$checkstyleVersion"
+
+    testImplementation 'org.junit.jupiter:junit-jupiter-api:5.10.0'
+    testImplementation 'org.junit.jupiter:junit-jupiter-params:5.10.0'
+    testRuntimeOnly 'org.junit.jupiter:junit-jupiter-engine:5.10.0'
+}
+
+test {
+    useJUnitPlatform()
+    // Forward env vars to test JVM
+    environment 'YT_COOKIES', System.getenv('YT_COOKIES') ?: ''
+    environment 'DOWNLOADER_DEBUG', System.getenv('DOWNLOADER_DEBUG') ?: ''
+    environment 'DISABLE_WEB_REMIX', System.getenv('DISABLE_WEB_REMIX') ?: ''
+    // Always re-run, never use cached result
+    outputs.upToDateWhen { false }
+    testLogging {
+        events 'passed', 'skipped', 'failed'
+        showStandardStreams = true
+    }
+}

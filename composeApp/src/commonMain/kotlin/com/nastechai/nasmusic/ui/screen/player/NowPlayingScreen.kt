@@ -726,16 +726,16 @@ fun NowPlayingScreenContent(
     // Vote Dialog
     if (showVoteDialog) {
         val canVoteLyrics =
-            screenDataState.lyricsData?.lyricsProvider == LyricsProvider.SIMPMUSIC &&
+            screenDataState.lyricsData?.lyricsProvider == LyricsProvider.NASMUSIC &&
                 screenDataState.lyricsData
                     ?.lyrics
-                    ?.simpMusicLyrics != null
+                    ?.nasMusicLyrics != null
         val canVoteTranslatedLyrics =
-            screenDataState.lyricsData?.translatedLyrics?.second == LyricsProvider.SIMPMUSIC &&
+            screenDataState.lyricsData?.translatedLyrics?.second == LyricsProvider.NASMUSIC &&
                 screenDataState.lyricsData
                     ?.translatedLyrics
                     ?.first
-                    ?.simpMusicLyrics != null
+                    ?.nasMusicLyrics != null
 
         VoteLyricsDialog(
             canVoteLyrics = canVoteLyrics,
@@ -2150,16 +2150,16 @@ fun NowPlayingScreenContent(
                                         Spacer(modifier = Modifier.weight(1f))
                                         // Vote button - only show if lyrics or translated lyrics from NasMusic
                                         val canVoteLyrics =
-                                            screenDataState.lyricsData?.lyricsProvider == LyricsProvider.SIMPMUSIC &&
+                                            screenDataState.lyricsData?.lyricsProvider == LyricsProvider.NASMUSIC &&
                                                 screenDataState.lyricsData
                                                     ?.lyrics
-                                                    ?.simpMusicLyrics != null
+                                                    ?.nasMusicLyrics != null
                                         val canVoteTranslatedLyrics =
-                                            screenDataState.lyricsData?.translatedLyrics?.second == LyricsProvider.SIMPMUSIC &&
+                                            screenDataState.lyricsData?.translatedLyrics?.second == LyricsProvider.NASMUSIC &&
                                                 screenDataState.lyricsData
                                                     ?.translatedLyrics
                                                     ?.first
-                                                    ?.simpMusicLyrics != null
+                                                    ?.nasMusicLyrics != null
                                         if (canVoteLyrics || canVoteTranslatedLyrics) {
                                             CompositionLocalProvider(LocalMinimumInteractiveComponentSize provides Dp.Unspecified) {
                                                 IconButton(
@@ -2229,7 +2229,7 @@ fun NowPlayingScreenContent(
                                         Text(
                                             text =
                                                 when (screenDataState.lyricsData?.lyricsProvider) {
-                                                    LyricsProvider.SIMPMUSIC -> {
+                                                    LyricsProvider.NASMUSIC -> {
                                                         stringResource(Res.string.lyrics_provider_nasmusic)
                                                     }
 
