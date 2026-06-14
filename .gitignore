@@ -41,3 +41,13 @@ sentry.properties
 /desktopApp/generated.conveyor.conf
 # Conveyor output directory
 /output/
+
+# GitHub Actions runner binaries (not committed - re-downloaded on setup)
+actions-runner/bin/
+actions-runner/externals/
+actions-runner/.runner
+actions-runner/.credentials
+actions-runner/.credentials_rsaparams
+actions-runner/_work/
+actions-runner/*.sh.template
+actions-runner/safe_sleep.sh
