@@ -1,0 +1,1 @@
+- [GitHub submodule path conflict](github-submodule-conflict.md) — blobs under a submodule path fail BadObjectState; delete the submodule entry (sha=null) in the first tree chunk first.
