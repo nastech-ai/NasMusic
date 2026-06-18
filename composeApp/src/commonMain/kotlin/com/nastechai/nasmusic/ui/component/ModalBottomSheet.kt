@@ -169,7 +169,6 @@ import nasmusic.composeapp.generated.resources.add_to_a_playlist
 import nasmusic.composeapp.generated.resources.add_to_queue
 import nasmusic.composeapp.generated.resources.album
 import nasmusic.composeapp.generated.resources.artists
-import nasmusic.composeapp.generated.resources.baseline_access_alarm_24
 import nasmusic.composeapp.generated.resources.baseline_add_photo_alternate_24
 import nasmusic.composeapp.generated.resources.baseline_album_24
 import nasmusic.composeapp.generated.resources.baseline_delete_24
@@ -236,15 +235,11 @@ import nasmusic.composeapp.generated.resources.outline_download_for_offline_24
 import nasmusic.composeapp.generated.resources.pitch
 import nasmusic.composeapp.generated.resources.play_circle
 import nasmusic.composeapp.generated.resources.play_next
-import nasmusic.composeapp.generated.resources.playback_speed
-import nasmusic.composeapp.generated.resources.playback_speed_pitch
-import nasmusic.composeapp.generated.resources.playback_speed_pitch_disabled
 import nasmusic.composeapp.generated.resources.playlist_name_cannot_be_empty
 import nasmusic.composeapp.generated.resources.plays
 import nasmusic.composeapp.generated.resources.processing
 import nasmusic.composeapp.generated.resources.queue
 import nasmusic.composeapp.generated.resources.radio
-import nasmusic.composeapp.generated.resources.round_speed_24
 import nasmusic.composeapp.generated.resources.save
 import nasmusic.composeapp.generated.resources.save_to_local_playlist
 import nasmusic.composeapp.generated.resources.saved_to_local_playlist
@@ -254,11 +249,6 @@ import nasmusic.composeapp.generated.resources.share
 import nasmusic.composeapp.generated.resources.share_url
 import nasmusic.composeapp.generated.resources.nasmusic_lyrics
 import nasmusic.composeapp.generated.resources.sleep_minutes
-import nasmusic.composeapp.generated.resources.sleep_timer
-import nasmusic.composeapp.generated.resources.sleep_timer_end_of_song
-import nasmusic.composeapp.generated.resources.sleep_timer_off
-import nasmusic.composeapp.generated.resources.sleep_timer_set_error
-import nasmusic.composeapp.generated.resources.sleep_timer_warning
 import nasmusic.composeapp.generated.resources.sort_by
 import nasmusic.composeapp.generated.resources.start_radio
 import nasmusic.composeapp.generated.resources.sync
@@ -279,7 +269,6 @@ import nasmusic.composeapp.generated.resources.youtube_transcript
 import nasmusic.composeapp.generated.resources.youtube_url
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Sentinel value used by SleepTimerBottomSheet to signal "end of current song"
 // Handle this in NowPlayingBottomSheetViewModel / SharedViewModel:
 //   if (minutes == END_OF_SONG_SENTINEL) → stop after current track finishes
 // ─────────────────────────────────────────────────────────────────────────────
@@ -1392,7 +1381,6 @@ fun NowPlayingBottomSheet(
     navController: NavController,
     song: SongEntity?,
     viewModel: NowPlayingBottomSheetViewModel = koinViewModel(),
-    setSleepTimerEnable: Boolean = false,
     changeMainLyricsProviderEnable: Boolean = false,
     onNavigateToOtherScreen: () -> Unit = {},
     onDelete: (() -> Unit)? = null,
@@ -1416,10 +1404,7 @@ fun NowPlayingBottomSheet(
     var addToAPlaylist by remember { mutableStateOf(false) }
     var artist by remember { mutableStateOf(false) }
     var mainLyricsProvider by remember { mutableStateOf(false) }
-    var sleepTimer by remember { mutableStateOf(false) }
-    var sleepTimerWarning by remember { mutableStateOf(false) }
     var isBottomSheetVisible by rememberSaveable { mutableStateOf(false) }
-    var changePlaybackSpeedPitch by remember { mutableStateOf(false) }
     val crossfadeEnabled by dataStoreManager.crossfadeEnabled.collectAsState(DataStoreManager.FALSE)
 
     LaunchedEffect(uiState) {
@@ -1430,23 +1415,6 @@ fun NowPlayingBottomSheet(
 
     LaunchedEffect(key1 = song) {
         viewModel.setSongEntity(song)
-    }
-
-    if (changePlaybackSpeedPitch) {
-        val playbackSpeed by dataStoreManager.playbackSpeed.collectAsState(1f)
-        val pitch by dataStoreManager.pitch.collectAsState(0)
-        PlaybackSpeedPitchBottomSheet(
-            onDismiss = { changePlaybackSpeedPitch = false },
-            playbackSpeed = playbackSpeed,
-            pitch = pitch,
-        ) { speed, p ->
-            viewModel.onUIEvent(
-                NowPlayingBottomSheetUIEvent.ChangePlaybackSpeedPitch(
-                    speed = speed,
-                    pitch = p,
-                ),
-            )
-        }
     }
 
     if (addToAPlaylist) {
@@ -1474,48 +1442,7 @@ fun NowPlayingBottomSheet(
         )
     }
 
-    if (sleepTimer) {
-        SleepTimerBottomSheet(onDismiss = { sleepTimer = false }) { minutes: Int ->
-            if (setSleepTimerEnable) {
-                viewModel.onUIEvent(
-                    NowPlayingBottomSheetUIEvent.SetSleepTimer(
-                        cancel = false,
-                        minutes = minutes,
-                    ),
-                )
-            }
-        }
-    }
 
-    if (sleepTimerWarning) {
-        AlertDialog(
-            containerColor = Color(0xFF242424),
-            onDismissRequest = { sleepTimerWarning = false },
-            confirmButton = {
-                TextButton(onClick = {
-                    sleepTimerWarning = false
-                    viewModel.onUIEvent(
-                        NowPlayingBottomSheetUIEvent.SetSleepTimer(
-                            cancel = true,
-                        ),
-                    )
-                }) {
-                    Text(text = stringResource(Res.string.yes), style = typo().labelSmall)
-                }
-            },
-            dismissButton = {
-                TextButton(onClick = { sleepTimerWarning = false }) {
-                    Text(text = stringResource(Res.string.cancel), style = typo().labelSmall)
-                }
-            },
-            title = {
-                Text(text = stringResource(Res.string.warning), style = typo().labelSmall)
-            },
-            text = {
-                Text(text = stringResource(Res.string.sleep_timer_warning), style = typo().bodyMedium)
-            },
-        )
-    }
 
     if (mainLyricsProvider) {
         var selected by remember {
@@ -1819,56 +1746,6 @@ fun NowPlayingBottomSheet(
                                 text = Res.string.main_lyrics_provider,
                             ) {
                                 mainLyricsProvider = true
-                            }
-                        }
-                    }
-                    Crossfade(targetState = setSleepTimerEnable) {
-                        val sleepTimerState = uiState.sleepTimer
-                        if (it) {
-                            // timeRemaining > 0 → countdown mode, -1 → end-of-song mode, 0 → off
-                            val isEndOfSong = sleepTimerState.timeRemaining == -1
-                            val isRunning = sleepTimerState.timeRemaining > 0 || isEndOfSong
-                            Crossfade(targetState = isRunning) { running ->
-                                if (running) {
-                                    ActionButton(
-                                        icon = painterResource(Res.drawable.baseline_access_alarm_24),
-                                        textString =
-                                            if (isEndOfSong) {
-                                                stringResource(Res.string.sleep_timer_end_of_song)
-                                            } else {
-                                                stringResource(Res.string.sleep_timer, sleepTimerState.timeRemaining.toString())
-                                            },
-                                        text = null,
-                                        textColor = seed,
-                                        iconColor = seed,
-                                    ) {
-                                        sleepTimerWarning = true
-                                    }
-                                } else {
-                                    ActionButton(
-                                        icon = painterResource(Res.drawable.baseline_access_alarm_24),
-                                        text = Res.string.sleep_timer_off,
-                                    ) {
-                                        sleepTimer = true
-                                    }
-                                }
-                            }
-                        }
-                    }
-                    Crossfade(targetState = setSleepTimerEnable) {
-                        if (it) {
-                            val isDesktop = getPlatform() == Platform.Desktop
-                            ActionButton(
-                                icon = painterResource(Res.drawable.round_speed_24),
-                                text =
-                                    if (crossfadeEnabled != DataStoreManager.TRUE) {
-                                        if (isDesktop) Res.string.playback_speed else Res.string.playback_speed_pitch
-                                    } else {
-                                        Res.string.playback_speed_pitch_disabled
-                                    },
-                                enable = crossfadeEnabled != DataStoreManager.TRUE,
-                            ) {
-                                changePlaybackSpeedPitch = true
                             }
                         }
                     }

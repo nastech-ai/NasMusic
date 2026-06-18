@@ -752,7 +752,6 @@ fun FullscreenPlayer(
                 NowPlayingBottomSheet(
                     onDismiss = { showBottom = false },
                     navController = navController,
-                    setSleepTimerEnable = true,
                     changeMainLyricsProviderEnable = true,
                     song = null,
                 )

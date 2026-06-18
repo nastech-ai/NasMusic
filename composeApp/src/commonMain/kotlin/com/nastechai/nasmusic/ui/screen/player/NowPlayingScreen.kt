@@ -52,8 +52,6 @@ import androidx.compose.foundation.layout.wrapContentHeight
 import androidx.compose.foundation.layout.wrapContentSize
 import androidx.compose.foundation.layout.wrapContentWidth
 import androidx.compose.foundation.lazy.LazyRow
-import androidx.compose.foundation.pager.HorizontalPager
-import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -152,7 +150,6 @@ import com.nastechai.nasmusic.extension.parseTimestampToMilliseconds
 import com.nastechai.nasmusic.extension.rememberIsInPipMode
 import com.nastechai.nasmusic.getPlatform
 import com.nastechai.nasmusic.ui.component.AIBadge
-import com.nastechai.nasmusic.ui.component.AddToPlaylistModalBottomSheet
 import com.nastechai.nasmusic.ui.component.DescriptionView
 import com.nastechai.nasmusic.ui.component.ExplicitBadge
 import com.nastechai.nasmusic.ui.component.FullscreenLyricsSheet
@@ -172,7 +169,6 @@ import com.nastechai.nasmusic.ui.theme.overlay
 import com.nastechai.nasmusic.ui.theme.typo
 import com.nastechai.nasmusic.viewModel.LyricsProvider
 import com.nastechai.nasmusic.viewModel.NowPlayingBottomSheetUIEvent
-import com.nastechai.nasmusic.viewModel.NowPlayingBottomSheetViewModel
 import com.nastechai.nasmusic.viewModel.SharedViewModel
 import com.nastechai.nasmusic.viewModel.UIEvent
 import dev.chrisbanes.haze.hazeEffect
@@ -193,7 +189,6 @@ import nasmusic.composeapp.generated.resources.Res
 import nasmusic.composeapp.generated.resources.artists
 import nasmusic.composeapp.generated.resources.baseline_fullscreen_24
 import nasmusic.composeapp.generated.resources.baseline_more_vert_24
-import nasmusic.composeapp.generated.resources.baseline_playlist_add_24
 import nasmusic.composeapp.generated.resources.crossfading
 import nasmusic.composeapp.generated.resources.description
 import nasmusic.composeapp.generated.resources.holder
@@ -291,104 +286,6 @@ fun NowPlayingScreenContent(
     val translatedVoteState by sharedViewModel.translatedVoteState.collectAsStateWithLifecycle()
     val lyricsVoteState by sharedViewModel.lyricsVoteState.collectAsStateWithLifecycle()
 
-    // Artwork Pager state — Spotify-style horizontal swipe between queue tracks.
-    // The pager wraps the Canvas + Thumbnail layers. Controller layout below stays fixed.
-    val nowPlayingState by sharedViewModel.nowPlayingState.collectAsStateWithLifecycle()
-    val queueDataState by sharedViewModel.getQueueDataState().collectAsStateWithLifecycle()
-    val artworkQueue by remember {
-        derivedStateOf { queueDataState?.data?.listTracks ?: emptyList() }
-    }
-    // ⚠️ Use track.videoId (already prefix-stripped at MediaServiceHandlerImpl.kt:386).
-    // Do NOT use mediaItem.mediaId — it carries the "Video" prefix for video items.
-    val nowPlayingVideoId: String? = nowPlayingState?.track?.videoId
-    val currentOrderIndex by remember(artworkQueue, nowPlayingVideoId) {
-        derivedStateOf { deriveOrderIndex(artworkQueue, nowPlayingVideoId) }
-    }
-    val isRepeatOne = controllerState.repeatState is RepeatState.One
-    // Single PagerState — the unified ArtworkPager renders BOTH the fullscreen canvas
-    // background and the centered square thumbnail in each page, so we don't need two
-    // pagers + state mirroring.
-    val artworkPagerState =
-        rememberPagerState(
-            initialPage = currentOrderIndex.coerceAtLeast(0),
-            pageCount = { artworkQueue.size.coerceAtLeast(1) },
-        )
-    var isAnimatingFromPlayer by remember { mutableStateOf(false) }
-    var isUserDraggingActive by remember { mutableStateOf(false) }
-
-    // Drag detection — `isScrollInProgress` is `true` for both user drags (forwarded
-    // by the outer Modifier.scrollable on the Column) and programmatic
-    // `animateScrollToPage`. We disambiguate via `isAnimatingFromPlayer`, which we
-    // set explicitly around the player → pager animation (try/finally).
-    LaunchedEffect(artworkPagerState) {
-        snapshotFlow {
-            artworkPagerState.isScrollInProgress to isAnimatingFromPlayer
-        }.collect { (scrolling, animating) ->
-            isUserDraggingActive = scrolling && !animating
-        }
-    }
-
-    // ① Player → Pager: animate to new track when player advances.
-    LaunchedEffect(currentOrderIndex, artworkQueue.size) {
-        val target = currentOrderIndex
-        if (!isUserDraggingActive &&
-            artworkQueue.isNotEmpty() &&
-            target in 0 until artworkQueue.size &&
-            target != artworkPagerState.currentPage
-        ) {
-            isAnimatingFromPlayer = true
-            try {
-                artworkPagerState.animateScrollToPage(target)
-            } finally {
-                isAnimatingFromPlayer = false
-            }
-        }
-    }
-
-    // ② Pager → Player: seek when user settles on a different page.
-    // Adjacent (±1) → Next/Previous (preserves crossfade flow on Android).
-    // Far skip → playMediaItemInMediaSource (handles unshuffling internally).
-    LaunchedEffect(artworkPagerState, currentOrderIndex, artworkQueue.size) {
-        snapshotFlow { artworkPagerState.settledPage }
-            .distinctUntilChanged()
-            .collect { settled ->
-                if (isAnimatingFromPlayer) return@collect
-                if (artworkQueue.isEmpty()) return@collect
-                if (settled !in 0 until artworkQueue.size) return@collect
-                if (settled == currentOrderIndex) return@collect
-
-                runCatching {
-                    when (val action = computeSeekAction(settled, currentOrderIndex)) {
-                        ArtworkSeekAction.Next -> {
-                            sharedViewModel.onUIEvent(UIEvent.Next)
-                        }
-                        // Use SkipToPrevious so a swipe always goes to the previous track —
-                        // UIEvent.Previous would seek to 0 of the current track once the
-                        // playhead has passed the 3-second mark.
-                        ArtworkSeekAction.Previous -> {
-                            sharedViewModel.onUIEvent(UIEvent.SkipToPrevious)
-                        }
-                        is ArtworkSeekAction.Skip -> {
-                            mediaPlayerHandler.playMediaItemInMediaSource(action.index)
-                        }
-                        ArtworkSeekAction.NoOp -> {
-                            Unit
-                        }
-                    }
-                }.onFailure { error ->
-                    Logger.w(TAG, "ArtworkPager seek failed: ${error.message}")
-                }
-            }
-    }
-
-    // ③ Queue mutation guard — when queue shrinks below currentPage, scroll to last index
-    // to avoid IndexOutOfBoundsException during recomposition.
-    LaunchedEffect(artworkQueue.size) {
-        if (artworkQueue.isNotEmpty() && artworkPagerState.currentPage >= artworkQueue.size) {
-            runCatching { artworkPagerState.scrollToPage(artworkQueue.lastIndex) }
-        }
-    }
-
     // State
     val isInPipMode = rememberIsInPipMode()
 
@@ -418,10 +315,6 @@ fun NowPlayingScreenContent(
         mutableStateOf(false)
     }
 
-    // NEW: Add to Playlist state
-    var showAddToPlaylistDirectly by rememberSaveable {
-        mutableStateOf(false)
-    }
 
     var shouldShowToolbar by remember {
         mutableStateOf(false)
@@ -664,7 +557,6 @@ fun NowPlayingScreenContent(
                 onDismiss()
             },
             song = null, // Auto set now playing
-            setSleepTimerEnable = true,
             changeMainLyricsProviderEnable = true,
         )
     }
@@ -696,32 +588,6 @@ fun NowPlayingScreenContent(
         )
     }
 
-    // NEW: Add to Playlist Bottom Sheet
-    if (showAddToPlaylistDirectly) {
-        val viewModel: NowPlayingBottomSheetViewModel = koinViewModel()
-        val uiState by viewModel.uiState.collectAsStateWithLifecycle()
-
-        LaunchedEffect(Unit) {
-            viewModel.resetPlaylists()
-            viewModel.setSongEntity(null) // Uses current playing song
-        }
-
-        AddToPlaylistModalBottomSheet(
-            isBottomSheetVisible = true,
-            listLocalPlaylist = uiState.listLocalPlaylist,
-            listYouTubePlaylist = uiState.listYouTubePlaylist,
-            onDismiss = { showAddToPlaylistDirectly = false },
-            onClick = { playlist ->
-                viewModel.onUIEvent(NowPlayingBottomSheetUIEvent.AddToPlaylist(playlist.id))
-                showAddToPlaylistDirectly = false
-            },
-            onYTPlaylistClick = { playlist ->
-                viewModel.onUIEvent(NowPlayingBottomSheetUIEvent.AddToYouTubePlaylist(playlist.browseId))
-                showAddToPlaylistDirectly = false
-            },
-            videoId = uiState.songUIState.videoId,
-        )
-    }
 
     // Vote Dialog
     if (showVoteDialog) {
@@ -790,9 +656,6 @@ fun NowPlayingScreenContent(
                     mainScrollState,
                     enabled = isExpanded,
                 )
-                // Horizontal swipe is handled by the unified ArtworkPager below.
-                // Spacers in this Column have no pointer input and don't block hits, so
-                // drags fall through to the Pager.
                 .then(
                     if (showHideMiddleLayout) {
                         if (blurBg && screenDataState.canvasData == null) {
@@ -818,510 +681,81 @@ fun NowPlayingScreenContent(
                     } else {
                         Modifier.background(md_theme_dark_background)
                     },
-                ),
-        ) {
-            Box(modifier = Modifier.fillMaxWidth()) {
-                // === Unified ArtworkPager (Spotify-style swipe) ===
-                // ONE HorizontalPager wraps both the fullscreen canvas backdrop AND the
-                // centered square thumbnail. Both layers slide together as a single page
-                // so when the user swipes during canvas mode, they see the next track's
-                // thumbnail enter and the canvas exit in lockstep.
-                HorizontalPager(
-                    state = artworkPagerState,
-                    modifier =
-                        Modifier
-                            .height(screenInfo.hDP.dp)
-                            .fillMaxWidth(),
-                    beyondViewportPageCount = 1,
-                    userScrollEnabled = !isRepeatOne && artworkQueue.isNotEmpty(),
-                    key = { idx ->
-                        val vid = artworkQueue.getOrNull(idx)?.videoId.orEmpty()
-                        "artwork_${vid}_$idx"
-                    },
-                ) { page ->
-                    val pageTrack = artworkQueue.getOrNull(page)
-                    val isCurrentArtworkPage = page == currentOrderIndex
-                    val pageHasCanvas = isCurrentArtworkPage && screenDataState.canvasData != null
-
-                    // Per-page palette state for the !blurBg gradient backdrop.
-                    // The bitmap is fed in by Layer 2's adjacent-thumbnail AsyncImage
-                    // (onSuccess), so we use the SAME bitmap that's painted on screen —
-                    // matches the outer Column's palette extraction characteristics.
-                    val pagePaletteState = rememberPaletteState()
-                    val pageStartColor =
-                        remember(pageTrack?.videoId) {
-                            Animatable(md_theme_dark_background)
-                        }
-                    LaunchedEffect(pagePaletteState, pageTrack?.videoId) {
-                        snapshotFlow { pagePaletteState.palette }
-                            .distinctUntilChanged()
-                            .collectLatest { palette ->
-                                pageStartColor.animateTo(
-                                    palette.getColorFromPalette(),
-                                )
-                            }
-                    }
-
-                    Box(
-                        contentAlignment = Alignment.Center,
-                        modifier =
-                            Modifier
-                                .fillMaxSize()
-                                // Prevent the canvas video (9:16 aspect, can be wider than the
-                                // page) and any other content from bleeding into adjacent pages.
-                                .clipToBounds()
-                                // Tap toggles controls only when the canvas is covering this page;
-                                // otherwise no-op (matches the legacy behaviour where the touch
-                                // overlay only appeared in canvas mode).
-                                .clickable(
-                                    enabled = pageHasCanvas,
-                                    onClick = {
-                                        if (mainScrollState.value == 0) {
-                                            showHideJob = true
-                                            showHideControlLayout = !showHideControlLayout
-                                        }
-                                    },
-                                    indication = null,
-                                    interactionSource =
-                                        remember {
-                                            MutableInteractionSource()
-                                        },
-                                ),
-                    ) {
-                        // ── Layer 0: per-page backdrop (adjacent pages only) ──
-                        // Mirrors the outer Column's bg branching so the backdrop logic stays
-                        // consistent during a swipe:
-                        //   - blurBg=true  → dim track thumbnail (matches the haze look)
-                        //   - blurBg=false → palette gradient (startColor → endColor) so the
-                        //                    adjacent page never falls back to a flat dark void
-                        //                    when the user disables blur.
-                        // The CURRENT page deliberately skips this layer so the existing
-                        // hazeEffect blur / gradient / canvas on the Column stays visible.
-                        if (!isCurrentArtworkPage && pageTrack != null) {
-                            if (blurBg) {
-                                val backdropUrl =
-                                    pageTrack.thumbnails
-                                        ?.maxByOrNull { it.width * it.height }
-                                        ?.url
-                                AsyncImage(
-                                    model =
-                                        ImageRequest
-                                            .Builder(LocalPlatformContext.current)
-                                            .data(backdropUrl)
-                                            .diskCachePolicy(CachePolicy.ENABLED)
-                                            .diskCacheKey(backdropUrl)
-                                            .crossfade(300)
-                                            .build(),
-                                    contentDescription = null,
-                                    contentScale = ContentScale.Crop,
-                                    placeholder = painterResource(Res.drawable.holder),
-                                    error = painterResource(Res.drawable.holder),
+                // Canvas backdrop
+                if (screenDataState.canvasData != null) {
+                    Crossfade(targetState = screenDataState.canvasData?.isVideo) { isVideo ->
+                        if (isVideo == true) {
+                            screenDataState.canvasData?.url?.let { url ->
+                                MediaPlayerView(
+                                    url = url,
                                     modifier =
                                         Modifier
-                                            .fillMaxSize()
-                                            // Dim slightly so the centered thumbnail above stands out.
-                                            .alpha(0.35f),
-                                )
-                            } else {
-                                // Palette is fed by Layer 2's adjacent-thumbnail AsyncImage
-                                // (see below) so the gradient color stays consistent with
-                                // the bitmap actually painted for that page.
-                                Box(
-                                    modifier =
-                                        Modifier
-                                            .fillMaxSize()
-                                            .background(
-                                                Brush.linearGradient(
-                                                    colors =
-                                                        listOf(
-                                                            pageStartColor.value,
-                                                            md_theme_dark_background,
-                                                        ),
-                                                    start = gradientOffset.start,
-                                                    end = gradientOffset.end,
-                                                ),
+                                            .fillMaxHeight()
+                                            .then(
+                                                if (getPlatform() == Platform.Desktop) {
+                                                    Modifier
+                                                } else {
+                                                    Modifier
+                                                        .wrapContentWidth(unbounded = true, align = Alignment.CenterHorizontally)
+                                                        .align(Alignment.Center)
+                                                },
                                             ),
                                 )
                             }
-                        }
-
-                        // ── Layer 1: fullscreen canvas backdrop (current track + canvas data) ──
-                        if (pageHasCanvas) {
-                            Crossfade(targetState = screenDataState.canvasData?.isVideo) { isVideo ->
-                                if (isVideo == true) {
-                                    screenDataState.canvasData?.url?.let { url ->
-                                        MediaPlayerView(
-                                            url = url,
-                                            modifier =
-                                                Modifier
-                                                    .fillMaxHeight()
-                                                    .then(
-                                                        if (getPlatform() == Platform.Desktop) {
-                                                            Modifier
-                                                        } else {
-                                                            Modifier
-                                                                .wrapContentWidth(unbounded = true, align = Alignment.CenterHorizontally)
-                                                                .align(Alignment.Center)
-                                                        },
-                                                    ),
-                                        )
-                                    }
-                                } else if (isVideo == false) {
-                                    AsyncImage(
-                                        model =
-                                            ImageRequest
-                                                .Builder(LocalPlatformContext.current)
-                                                .data(screenDataState.canvasData?.url)
-                                                .diskCachePolicy(CachePolicy.ENABLED)
-                                                .diskCacheKey(screenDataState.canvasData?.url)
-                                                .crossfade(550)
-                                                .build(),
-                                        contentDescription = null,
-                                        modifier = Modifier.fillMaxSize(),
-                                    )
-                                }
-                            }
-                            // Bottom gradient overlay — different intensity per state:
-                            // - Focus: original full-height heavy gradient (controls readability)
-                            // - Unfocus: 50% height + 50% lighter colors (just enough for metadata,
-                            //   lets more canvas show through)
-                            Crossfade(
-                                targetState = showHideControlLayout,
-                                modifier =
-                                    Modifier
-                                        .fillMaxSize()
-                                        .align(Alignment.BottomCenter),
-                            ) { focused ->
-                                if (focused) {
-                                    Box(
-                                        modifier =
-                                            Modifier
-                                                .fillMaxSize()
-                                                .background(
-                                                    Brush.verticalGradient(
-                                                        colorStops =
-                                                            arrayOf(
-                                                                0.2f to overlay,
-                                                                1f to Color.Black,
-                                                            ),
-                                                    ),
-                                                ),
-                                    )
-                                } else {
-                                    // Box fullscreen — gradient stops control where darkening starts.
-                                    // Note: pager content can extend past visible viewport bottom due
-                                    // to parent offsets. We span the FULL pager height (instead of a
-                                    // fixed 120.dp BottomCenter Box) so the colorStops are anchored
-                                    // to pager height — guaranteeing the visible viewport bottom
-                                    // always falls inside the held-Black region (>=0.85f).
-                                    // Unfocused gradient — compact dark coverage at the very bottom only:
-                                    //   - 0%-92%: fully Transparent (canvas clear)
-                                    //   - 92%-97%: quick fade to Black
-                                    //   - 97%-100%: held solid Black (avoids canvas bleed-through
-                                    //     at visible viewport bottom — alpha must reach 0xFF before
-                                    //     the visible bottom, which sits at ~94-95% of pager).
-                                    Box(
-                                        modifier =
-                                            Modifier
-                                                .fillMaxSize()
-                                                .background(
-                                                    Brush.verticalGradient(
-                                                        colorStops =
-                                                            arrayOf(
-                                                                0f to Color.Transparent,
-                                                                0.92f to Color.Transparent,
-                                                                0.97f to Color.Black,
-                                                                1f to Color.Black,
-                                                            ),
-                                                    ),
-                                                ),
-                                    )
-                                }
-                            }
-                        }
-
-                        // ── Layer 2: centered square thumbnail ──
-                        // Positioned at the same Y as the original middle layout
-                        // (TopAppBar height + middleLayoutPaddingDp from the top of the page).
-                        // alpha=0 when the canvas is covering this page; otherwise visible so
-                        // adjacent pages always show the upcoming/previous track artwork.
-                        Column(modifier = Modifier.fillMaxSize()) {
-                            Spacer(modifier = Modifier.height(topAppBarHeightDp.dp))
-                            Spacer(
-                                modifier =
-                                    Modifier
-                                        .animateContentSize()
-                                        .height(middleLayoutPaddingDp.dp)
-                                        .fillMaxWidth(),
+                        } else if (isVideo == false) {
+                            AsyncImage(
+                                model =
+                                    ImageRequest
+                                        .Builder(LocalPlatformContext.current)
+                                        .data(screenDataState.canvasData?.url)
+                                        .diskCachePolicy(CachePolicy.ENABLED)
+                                        .diskCacheKey(screenDataState.canvasData?.url)
+                                        .crossfade(550)
+                                        .build(),
+                                contentDescription = null,
+                                modifier = Modifier.fillMaxSize(),
                             )
+                        }
+                    }
+                    Crossfade(
+                        targetState = showHideControlLayout,
+                        modifier =
+                            Modifier
+                                .fillMaxSize()
+                                .align(Alignment.BottomCenter),
+                    ) { focused ->
+                        if (focused) {
                             Box(
                                 modifier =
                                     Modifier
-                                        .fillMaxWidth()
-                                        .padding(horizontal = 20.dp)
-                                        .alpha(if (pageHasCanvas) 0f else 1f)
-                                        .aspectRatio(1f),
-                            ) {
-                                if (isCurrentArtworkPage) {
-                                    // Live artwork (drives palette extraction via setBitmap).
-                                    Box(
-                                        contentAlignment = Alignment.Center,
-                                        modifier =
-                                            Modifier
-                                                .align(Alignment.Center)
-                                                .background(Color.Transparent)
-                                                .shadow(
-                                                    elevation = 3.dp,
-                                                    shape = RoundedCornerShape(8.dp),
-                                                    spotColor =
-                                                        spotShadowColor.copy(
-                                                            alpha = 0.6f,
-                                                        ),
-                                                    ambientColor = Color.Transparent,
-                                                ),
-                                    ) {
-                                        AsyncImage(
-                                            model =
-                                                ImageRequest
-                                                    .Builder(LocalPlatformContext.current)
-                                                    .data(screenDataState.thumbnailURL)
-                                                    .diskCachePolicy(CachePolicy.ENABLED)
-                                                    .diskCacheKey(screenDataState.thumbnailURL + "BIGGER")
-                                                    .crossfade(550)
-                                                    .build(),
-                                            contentDescription = "",
-                                            onSuccess = {
-                                                sharedViewModel.setBitmap(
-                                                    it.result.image.toImageBitmap(),
-                                                )
-                                            },
-                                            contentScale = ContentScale.Crop,
-                                            placeholder = painterResource(Res.drawable.holder),
-                                            error = painterResource(Res.drawable.holder),
-                                            modifier =
-                                                Modifier
-                                                    .align(Alignment.Center)
-                                                    .padding(3.dp)
-                                                    .fillMaxWidth()
-                                                    .background(Color.Transparent)
-                                                    .aspectRatio(
-                                                        if (!screenDataState.isVideo) 1f else 16f / 9,
-                                                    ).clip(
-                                                        RoundedCornerShape(8.dp),
-                                                    ).alpha(
-                                                        if (!screenDataState.isVideo || !shouldShowVideo) 1f else 0f,
+                                        .fillMaxSize()
+                                        .background(
+                                            Brush.verticalGradient(
+                                                colorStops =
+                                                    arrayOf(
+                                                        0.2f to overlay,
+                                                        1f to Color.Black,
                                                     ),
-                                        )
-                                    }
-
-                                    // Inline video player (current page + isVideo + shouldShowVideo).
-                                    androidx.compose.animation.AnimatedVisibility(
-                                        visible = screenDataState.isVideo && shouldShowVideo,
-                                        modifier = Modifier.align(Alignment.Center),
-                                    ) {
-                                        var internalShowSubtitle by rememberSaveable {
-                                            mutableStateOf(true)
-                                        }
-                                        Box(
-                                            modifier =
-                                                Modifier
-                                                    .fillMaxWidth()
-                                                    .aspectRatio(16f / 9)
-                                                    .clip(RoundedCornerShape(8.dp))
-                                                    .background(md_theme_dark_background),
-                                        ) {
-                                            Box(Modifier.fillMaxSize()) {
-                                                MediaPlayerViewWithSubtitle(
-                                                    playerName = MAIN_PLAYER,
-                                                    modifier = Modifier.align(Alignment.Center),
-                                                    shouldShowSubtitle = internalShowSubtitle,
-                                                    shouldPip = false,
-                                                    shouldScaleDownSubtitle = true,
-                                                    timelineState = timelineState,
-                                                    lyricsData = screenDataState.lyricsData?.lyrics,
-                                                    translatedLyricsData = screenDataState.lyricsData?.translatedLyrics?.first,
-                                                    isInPipMode = isInPipMode,
-                                                    mainTextStyle = typo().bodyLarge,
-                                                    translatedTextStyle = typo().bodyMedium,
-                                                )
-                                            }
-                                            Box(
-                                                modifier =
-                                                    Modifier
-                                                        .fillMaxSize()
-                                                        .clickable(
-                                                            onClick = { showHideFullscreenOverlay = !showHideFullscreenOverlay },
-                                                            indication = null,
-                                                            interactionSource =
-                                                                remember {
-                                                                    MutableInteractionSource()
-                                                                },
-                                                        ),
-                                            ) {
-                                                Crossfade(targetState = showHideFullscreenOverlay) {
-                                                    if (it) {
-                                                        Box(
-                                                            modifier =
-                                                                Modifier
-                                                                    .fillMaxSize()
-                                                                    .background(
-                                                                        Brush.verticalGradient(
-                                                                            colorStops =
-                                                                                arrayOf(
-                                                                                    0.03f to blackMoreOverlay,
-                                                                                    0.15f to overlay,
-                                                                                    0.8f to Color.Transparent,
-                                                                                ),
-                                                                        ),
-                                                                    ),
-                                                        ) {
-                                                            IconButton(
-                                                                onClick = {
-                                                                    onDismiss()
-                                                                    navController.navigate(FullscreenDestination)
-                                                                },
-                                                                Modifier.align(Alignment.TopEnd),
-                                                            ) {
-                                                                Icon(
-                                                                    painter = painterResource(Res.drawable.baseline_fullscreen_24),
-                                                                    contentDescription = "",
-                                                                    tint = Color.White,
-                                                                )
-                                                            }
-                                                            Row(
-                                                                Modifier
-                                                                    .align(Alignment.Center)
-                                                                    .fillMaxWidth(),
-                                                                horizontalArrangement = Arrangement.SpaceEvenly,
-                                                            ) {
-                                                                FilledTonalIconButton(
-                                                                    colors =
-                                                                        IconButtonDefaults.iconButtonColors().copy(
-                                                                            containerColor = Color.Transparent,
-                                                                        ),
-                                                                    modifier =
-                                                                        Modifier
-                                                                            .size(48.dp)
-                                                                            .aspectRatio(1f)
-                                                                            .clip(CircleShape),
-                                                                    onClick = {
-                                                                        sharedViewModel.onUIEvent(UIEvent.Backward)
-                                                                    },
-                                                                ) {
-                                                                    Icon(
-                                                                        imageVector = Icons.Rounded.Replay5,
-                                                                        tint = Color.White,
-                                                                        contentDescription = "",
-                                                                        modifier =
-                                                                            Modifier
-                                                                                .size(36.dp)
-                                                                                .alpha(0.8f),
-                                                                    )
-                                                                }
-                                                                FilledTonalIconButton(
-                                                                    colors =
-                                                                        IconButtonDefaults.iconButtonColors().copy(
-                                                                            containerColor = Color.Transparent,
-                                                                        ),
-                                                                    modifier =
-                                                                        Modifier
-                                                                            .size(48.dp)
-                                                                            .aspectRatio(1f)
-                                                                            .clip(CircleShape),
-                                                                    onClick = {
-                                                                        sharedViewModel.onUIEvent(UIEvent.Forward)
-                                                                    },
-                                                                ) {
-                                                                    Icon(
-                                                                        imageVector = Icons.Rounded.Forward5,
-                                                                        tint = Color.White,
-                                                                        contentDescription = "",
-                                                                        modifier =
-                                                                            Modifier
-                                                                                .size(36.dp)
-                                                                                .alpha(0.8f),
-                                                                    )
-                                                                }
-                                                            }
-                                                            if (screenDataState.lyricsData != null) {
-                                                                IconButton(
-                                                                    onClick = {
-                                                                        internalShowSubtitle = !internalShowSubtitle
-                                                                    },
-                                                                    Modifier.align(Alignment.BottomEnd),
-                                                                ) {
-                                                                    Icon(
-                                                                        imageVector =
-                                                                            if (internalShowSubtitle) {
-                                                                                Icons.Filled.SubtitlesOff
-                                                                            } else {
-                                                                                Icons.Filled.Subtitles
-                                                                            },
-                                                                        contentDescription = "",
-                                                                        tint = Color.White,
-                                                                    )
-                                                                }
-                                                            }
-                                                        }
-                                                    }
-                                                }
-                                            }
-                                        }
-                                    }
-                                } else if (pageTrack != null) {
-                                    // Adjacent page — static thumbnail from Track.thumbnails.
-                                    val staticThumb =
-                                        pageTrack.thumbnails
-                                            ?.maxByOrNull { it.width * it.height }
-                                            ?.url
-                                    val palettePageScope = rememberCoroutineScope()
-                                    Box(
-                                        contentAlignment = Alignment.Center,
-                                        modifier =
-                                            Modifier
-                                                .align(Alignment.Center)
-                                                .background(Color.Transparent)
-                                                .shadow(
-                                                    elevation = 3.dp,
-                                                    shape = RoundedCornerShape(8.dp),
-                                                    spotColor = Color.Black.copy(alpha = 0.4f),
-                                                    ambientColor = Color.Transparent,
-                                                ),
-                                    ) {
-                                        AsyncImage(
-                                            model =
-                                                ImageRequest
-                                                    .Builder(LocalPlatformContext.current)
-                                                    .data(staticThumb)
-                                                    .diskCachePolicy(CachePolicy.ENABLED)
-                                                    .diskCacheKey(staticThumb)
-                                                    .crossfade(300)
-                                                    .build(),
-                                            contentDescription = pageTrack.title,
-                                            contentScale = ContentScale.Crop,
-                                            placeholder = painterResource(Res.drawable.holder),
-                                            error = painterResource(Res.drawable.holder),
-                                            // Feed the per-page palette using the SAME bitmap
-                                            // we just rendered so the Layer 0 gradient backdrop
-                                            // matches what the user sees on screen.
-                                            onSuccess = { state ->
-                                                palettePageScope.launch {
-                                                    pagePaletteState.generate(
-                                                        state.result.image.toImageBitmap(),
-                                                    )
-                                                }
-                                            },
-                                            modifier =
-                                                Modifier
-                                                    .align(Alignment.Center)
-                                                    .padding(3.dp)
-                                                    .fillMaxWidth()
-                                                    .aspectRatio(1f)
-                                                    .clip(RoundedCornerShape(8.dp)),
-                                        )
-                                    }
-                                }
-                            }
+                                            ),
+                                        ),
+                            )
+                        } else {
+                            Box(
+                                modifier =
+                                    Modifier
+                                        .fillMaxSize()
+                                        .background(
+                                            Brush.verticalGradient(
+                                                colorStops =
+                                                    arrayOf(
+                                                        0f to Color.Transparent,
+                                                        0.92f to Color.Transparent,
+                                                        0.97f to Color.Black,
+                                                        1f to Color.Black,
+                                                    ),
+                                            ),
+                                        ),
+                            )
                         }
                     }
                 }
@@ -1430,11 +864,7 @@ fun NowPlayingScreenContent(
                                         ).fillMaxWidth(),
                             )
 
-                            // Artwork is rendered by the unified ArtworkPager above (which lives in the
-                            // outer Box). Reserve the same vertical space here so the Info Layout below
-                            // stays at its original Y position. Spacer has no pointer input so it does
-                            // not block the pager swipe gesture beneath it.
-                            Spacer(
+                            Box(
                                 modifier =
                                     Modifier
                                         .fillMaxWidth()
@@ -1448,16 +878,212 @@ fun NowPlayingScreenContent(
                                                         .toInt()
                                                 }
                                         }.aspectRatio(1f),
-                            )
+                            ) {
+                                Box(
+                                    contentAlignment = Alignment.Center,
+                                    modifier =
+                                        Modifier
+                                            .align(Alignment.Center)
+                                            .background(Color.Transparent)
+                                            .shadow(
+                                                elevation = 3.dp,
+                                                shape = RoundedCornerShape(8.dp),
+                                                spotColor =
+                                                    spotShadowColor.copy(
+                                                        alpha = 0.6f,
+                                                    ),
+                                                ambientColor = Color.Transparent,
+                                            ),
+                                ) {
+                                    AsyncImage(
+                                        model =
+                                            ImageRequest
+                                                .Builder(LocalPlatformContext.current)
+                                                .data(screenDataState.thumbnailURL)
+                                                .diskCachePolicy(CachePolicy.ENABLED)
+                                                .diskCacheKey(screenDataState.thumbnailURL + "BIGGER")
+                                                .crossfade(550)
+                                                .build(),
+                                        contentDescription = "",
+                                        onSuccess = {
+                                            sharedViewModel.setBitmap(
+                                                it.result.image.toImageBitmap(),
+                                            )
+                                        },
+                                        contentScale = ContentScale.Crop,
+                                        placeholder = painterResource(Res.drawable.holder),
+                                        error = painterResource(Res.drawable.holder),
+                                        modifier =
+                                            Modifier
+                                                .align(Alignment.Center)
+                                                .padding(3.dp)
+                                                .fillMaxWidth()
+                                                .background(Color.Transparent)
+                                                .aspectRatio(
+                                                    if (!screenDataState.isVideo) 1f else 16f / 9,
+                                                ).clip(
+                                                    RoundedCornerShape(8.dp),
+                                                ).alpha(
+                                                    if (!screenDataState.isVideo || !shouldShowVideo) 1f else 0f,
+                                                ),
+                                    )
+                                }
 
-                            Spacer(
-                                modifier =
-                                    Modifier
-                                        .animateContentSize()
-                                        .height(
-                                            middleLayoutPaddingDp.dp,
-                                        ).fillMaxWidth(),
-                            )
+                                // Inline video player
+                                androidx.compose.animation.AnimatedVisibility(
+                                    visible = screenDataState.isVideo && shouldShowVideo,
+                                    modifier = Modifier.align(Alignment.Center),
+                                ) {
+                                    var internalShowSubtitle by rememberSaveable {
+                                        mutableStateOf(true)
+                                    }
+                                    Box(
+                                        modifier =
+                                            Modifier
+                                                .fillMaxWidth()
+                                                .aspectRatio(16f / 9)
+                                                .clip(RoundedCornerShape(8.dp))
+                                                .background(md_theme_dark_background),
+                                    ) {
+                                        Box(Modifier.fillMaxSize()) {
+                                            MediaPlayerViewWithSubtitle(
+                                                playerName = MAIN_PLAYER,
+                                                modifier = Modifier.align(Alignment.Center),
+                                                shouldShowSubtitle = internalShowSubtitle,
+                                                shouldPip = false,
+                                                shouldScaleDownSubtitle = true,
+                                                timelineState = timelineState,
+                                                lyricsData = screenDataState.lyricsData?.lyrics,
+                                                translatedLyricsData = screenDataState.lyricsData?.translatedLyrics?.first,
+                                                isInPipMode = isInPipMode,
+                                                mainTextStyle = typo().bodyLarge,
+                                                translatedTextStyle = typo().bodyMedium,
+                                            )
+                                        }
+                                        Box(
+                                            modifier =
+                                                Modifier
+                                                    .fillMaxSize()
+                                                    .clickable(
+                                                        onClick = { showHideFullscreenOverlay = !showHideFullscreenOverlay },
+                                                        indication = null,
+                                                        interactionSource =
+                                                            remember {
+                                                                MutableInteractionSource()
+                                                            },
+                                                    ),
+                                        ) {
+                                            Crossfade(targetState = showHideFullscreenOverlay) {
+                                                if (it) {
+                                                    Box(
+                                                        modifier =
+                                                            Modifier
+                                                                .fillMaxSize()
+                                                                .background(
+                                                                    Brush.verticalGradient(
+                                                                        colorStops =
+                                                                            arrayOf(
+                                                                                0.03f to blackMoreOverlay,
+                                                                                0.15f to overlay,
+                                                                                0.8f to Color.Transparent,
+                                                                            ),
+                                                                    ),
+                                                                ),
+                                                    ) {
+                                                        IconButton(
+                                                            onClick = {
+                                                                onDismiss()
+                                                                navController.navigate(FullscreenDestination)
+                                                            },
+                                                            Modifier.align(Alignment.TopEnd),
+                                                        ) {
+                                                            Icon(
+                                                                painter = painterResource(Res.drawable.baseline_fullscreen_24),
+                                                                contentDescription = "",
+                                                                tint = Color.White,
+                                                            )
+                                                        }
+                                                        Row(
+                                                            Modifier
+                                                                .align(Alignment.Center)
+                                                                .fillMaxWidth(),
+                                                            horizontalArrangement = Arrangement.SpaceEvenly,
+                                                        ) {
+                                                            FilledTonalIconButton(
+                                                                colors =
+                                                                    IconButtonDefaults.iconButtonColors().copy(
+                                                                        containerColor = Color.Transparent,
+                                                                    ),
+                                                                modifier =
+                                                                    Modifier
+                                                                        .size(48.dp)
+                                                                        .aspectRatio(1f)
+                                                                        .clip(CircleShape),
+                                                                onClick = {
+                                                                    sharedViewModel.onUIEvent(UIEvent.Backward)
+                                                                },
+                                                            ) {
+                                                                Icon(
+                                                                    imageVector = Icons.Rounded.Replay5,
+                                                                    tint = Color.White,
+                                                                    contentDescription = "",
+                                                                    modifier =
+                                                                        Modifier
+                                                                            .size(36.dp)
+                                                                            .alpha(0.8f),
+                                                                )
+                                                            }
+                                                            FilledTonalIconButton(
+                                                                colors =
+                                                                    IconButtonDefaults.iconButtonColors().copy(
+                                                                        containerColor = Color.Transparent,
+                                                                    ),
+                                                                modifier =
+                                                                    Modifier
+                                                                        .size(48.dp)
+                                                                        .aspectRatio(1f)
+                                                                        .clip(CircleShape),
+                                                                onClick = {
+                                                                    sharedViewModel.onUIEvent(UIEvent.Forward)
+                                                                },
+                                                            ) {
+                                                                Icon(
+                                                                    imageVector = Icons.Rounded.Forward5,
+                                                                    tint = Color.White,
+                                                                    contentDescription = "",
+                                                                    modifier =
+                                                                        Modifier
+                                                                            .size(36.dp)
+                                                                            .alpha(0.8f),
+                                                                )
+                                                            }
+                                                        }
+                                                        if (screenDataState.lyricsData != null) {
+                                                            IconButton(
+                                                                onClick = {
+                                                                    internalShowSubtitle = !internalShowSubtitle
+                                                                },
+                                                                Modifier.align(Alignment.BottomEnd),
+                                                            ) {
+                                                                Icon(
+                                                                    imageVector =
+                                                                        if (internalShowSubtitle) {
+                                                                            Icons.Filled.SubtitlesOff
+                                                                        } else {
+                                                                            Icons.Filled.Subtitles
+                                                                        },
+                                                                    contentDescription = "",
+                                                                    tint = Color.White,
+                                                                )
+                                                            }
+                                                        }
+                                                    }
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                            }
 
                             // Info Layout
                             Box {
@@ -1788,7 +1414,7 @@ fun NowPlayingScreenContent(
                                     } else {
                                         Spacer(Modifier.height(16.dp))
                                     }
-                                    // List Bottom Buttons - MODIFIED TO ADD PLAYLIST BUTTON
+                                    // NasMusic: Player bottom action bar (info, add-to-playlist, queue)
                                     Row(
                                         modifier =
                                             Modifier
@@ -1816,23 +1442,6 @@ fun NowPlayingScreenContent(
                                             horizontalArrangement = Arrangement.spacedBy(12.dp),
                                             verticalAlignment = Alignment.CenterVertically,
                                         ) {
-                                            // NEW: Add to Playlist Button (Center-Right)
-                                            IconButton(
-                                                modifier =
-                                                    Modifier
-                                                        .size(24.dp)
-                                                        .aspectRatio(1f)
-                                                        .clip(CircleShape),
-                                                onClick = {
-                                                    showAddToPlaylistDirectly = true
-                                                },
-                                            ) {
-                                                Icon(
-                                                    painter = painterResource(Res.drawable.baseline_playlist_add_24),
-                                                    tint = Color.White,
-                                                    contentDescription = "Add to Playlist",
-                                                )
-                                            }
 
                                             // Queue Button (Right)
                                             IconButton(
